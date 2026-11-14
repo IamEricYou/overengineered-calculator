@@ -1,0 +1,11 @@
+[package]
+name = "calc-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "overcalc"
+path = "src/main.rs"
+
+[dependencies]
+calc-core = { path = "../calc-core" }
