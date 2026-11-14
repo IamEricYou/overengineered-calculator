@@ -246,6 +246,7 @@ impl Tree<&str> {
                 NodeKind::Literal(text)
                     if text.trim_start_matches('0') == "9223372036854775808" =>
                 {
+                    check_depth(depth + 1, &self.nodes[child].span)?;
                     NodeKind::Literal(i64::MIN)
                 }
                 _ => NodeKind::Operation(Operation::Negate(self.validate_node(
@@ -355,6 +356,18 @@ mod tests {
                 evaluate_expression(&input).unwrap_err().kind,
                 ErrorKind::TooDeep
             ));
+        }
+    }
+
+    #[test]
+    fn bounds_negated_literals_before_folding_minimum() {
+        for (literal, expected) in [("-1", -1), ("-9223372036854775808", i64::MIN)] {
+            let allowed = format!("{literal}{}", "+0".repeat(MAX_DEPTH - 2));
+            assert_eq!(evaluate_expression(&allowed).unwrap(), expected);
+            let rejected = format!("{allowed}+0");
+            let error = evaluate_expression(&rejected).unwrap_err();
+            assert!(matches!(error.kind, ErrorKind::TooDeep));
+            assert_eq!(error.span, 1..literal.len());
         }
     }
 }

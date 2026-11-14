@@ -60,3 +60,11 @@ After implementation, review each PR in a separate verification pass against its
 2. The intentionally added bottleneck or implementation complexity and why it is worth studying. Mark predicted costs as hypotheses until measured.
 3. A technically defensible way to make the design harder, including the behavior or invariant it would let us test.
 4. Whether that design belongs in the current PR or a later milestone, and which correctness issues were fixed.
+
+### Milestone 3 review follow-ups
+
+- Consider distinct private IDs for parsed and checked arenas so lowering cannot
+  use an index from the wrong arena. Semantic validation can change node counts.
+- Give direct evaluation and IR lowering a shared checked expression type.
+  Keep the public evaluation entry point and expose internal phase boundaries
+  for measuring parsing, validation, lowering, and execution separately.
