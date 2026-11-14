@@ -2,6 +2,21 @@
 
 A ridiculously overengineered, memory-safe, compiler-inspired CLI calculator written in Rust.
 
+## Run the current CLI
+
+Pass two signed 64-bit operands and an operator as three arguments. Quote
+`*` to keep the shell from expanding it.
+
+```sh
+cargo run --locked --bin overcalc -- 1 + 1    # 2
+cargo run --locked --bin overcalc -- -7 / 3   # -2
+cargo run --locked --bin overcalc -- 6 '*' 7  # 42
+```
+
+Success writes one result line to stdout and exits with status 0. Invalid
+arguments, division by zero, and overflow write one diagnostic to stderr
+and exit with status 1.
+
 ## Planned CLI
 
 ```sh
@@ -17,7 +32,7 @@ The arithmetic contract uses checked signed 64-bit integers, parentheses, unary 
 
 Each milestone gets its own pull request.
 
-- [ ] **1. Arithmetic contract and CLI.** Set up the Cargo workspace and CI. Specify integer boundaries, error output, and exit codes so every engine has the same observable behavior.
+- [x] **1. Arithmetic contract and CLI.** Set up the Cargo workspace and CI. Specify integer boundaries, error output, and exit codes so every engine has the same observable behavior.
 - [ ] **2. Compiler frontend.** Build a zero-copy lexer, Pratt parser, arena-backed AST, semantic analysis, and a direct evaluator. Borrowed input and byte spans let diagnostics point to the original expression while node IDs expose the arena's storage model.
 - [ ] **3. IR, bytecode, and VM.** Lower the AST to linear IR, emit register bytecode, and execute it in the enterprise engine. Separate representations make it possible to measure compilation and repeatedly execute a compiled program.
 - [ ] **4. Optimization passes.** Implement constant folding and compare instruction counts. Failed folds stay at their original execution positions so the first reported arithmetic error survives optimization.
