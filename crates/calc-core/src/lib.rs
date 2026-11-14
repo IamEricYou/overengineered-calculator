@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+mod expression;
+
+pub use expression::{evaluate_expression, ExpressionError};
+
 #[derive(Debug, Clone, Copy)]
 pub enum Operator {
     Add,

@@ -4,7 +4,19 @@ A ridiculously overengineered, memory-safe, compiler-inspired CLI calculator wri
 
 ## Run the current CLI
 
-Pass two signed 64-bit operands and an operator as three arguments. Quote
+Evaluate a quoted expression with the direct evaluator. The current engine supports
+ASCII decimal literals, unary minus, parentheses, and whitespace. Diagnostics
+for expression inputs identify half-open byte ranges in the original UTF-8 string.
+
+```sh
+cargo run --locked --bin overcalc -- "2 + 3 * (4 - 1)"  # 11
+cargo run --locked --bin overcalc -- "1 + 1" --engine naive  # 2
+```
+
+The parser and semantic analyzer guard recursion at a depth of 128, counting the
+root at depth zero. This also bounds left-associated trees during validation.
+
+Alternatively, pass two signed 64-bit operands and an operator as three arguments. Quote
 `*` to keep the shell from expanding it.
 
 ```sh
@@ -33,7 +45,7 @@ The arithmetic contract uses checked signed 64-bit integers, parentheses, unary 
 Each milestone gets its own pull request.
 
 - [x] **1. Arithmetic contract and CLI.** Set up the Cargo workspace and CI. Specify integer boundaries, error output, and exit codes so every engine has the same observable behavior.
-- [ ] **2. Compiler frontend.** Build a zero-copy lexer, Pratt parser, arena-backed AST, semantic analysis, and a direct evaluator. Borrowed input and byte spans let diagnostics point to the original expression while node IDs expose the arena's storage model.
+- [x] **2. Compiler frontend.** Build a zero-copy lexer, Pratt parser, arena-backed AST, semantic analysis, and a direct evaluator. Borrowed input and byte spans let diagnostics point to the original expression while node IDs expose the arena's storage model.
 - [ ] **3. IR, bytecode, and VM.** Lower the AST to linear IR, emit register bytecode, and execute it in the enterprise engine. Separate representations make it possible to measure compilation and repeatedly execute a compiled program.
 - [ ] **4. Optimization passes.** Implement constant folding and compare instruction counts. Failed folds stay at their original execution positions so the first reported arithmetic error survives optimization.
 - [ ] **5. Memory and allocation tracking.** Reuse preallocated VM registers and count heap allocations. Target zero allocations during repeated execution of an already compiled program with initialized buffers.
