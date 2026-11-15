@@ -19,7 +19,7 @@ fn calculate(args: &[OsString]) -> Result<i64, String> {
         [_, flag, ..] if flag.as_encoded_bytes().starts_with(b"--") && flag != "--engine" => {
             return Err(format!(
                 "unknown option: {}; {USAGE}",
-                flag.to_string_lossy()
+                flag.to_string_lossy().escape_default()
             ));
         }
         _ => None,

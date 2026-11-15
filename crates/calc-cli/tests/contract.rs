@@ -61,6 +61,10 @@ fn evaluates_an_expression_with_the_naive_engine() {
 fn reports_expression_option_errors() {
     let usage = "usage: overcalc <expression> [--engine naive] | <left> <operator> <right>";
     for (args, diagnostic) in [
+        (
+            vec!["1+1", "--bad\nflag\r\x1b", "naive"],
+            r"unknown option: --bad\nflag\r\u{1b}",
+        ),
         (vec!["1+1", "--engin", "naive"], "unknown option: --engin"),
         (vec!["1+1", "--engine"], "missing value for --engine"),
         (
