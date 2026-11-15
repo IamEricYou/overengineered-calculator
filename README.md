@@ -7,6 +7,8 @@ A ridiculously overengineered, memory-safe, compiler-inspired CLI calculator wri
 Evaluate a quoted expression with the direct evaluator. The current engine supports
 ASCII decimal literals, unary minus, parentheses, and whitespace. Diagnostics
 for expression inputs identify half-open byte ranges in the original UTF-8 string.
+The entire expression is validated before arithmetic starts. During evaluation,
+the left operand is evaluated before the right operand.
 
 ```sh
 cargo run --locked --bin overcalc -- "2 + 3 * (4 - 1)"  # 11
@@ -68,3 +70,5 @@ After implementation, review each PR in a separate verification pass against its
 - Give direct evaluation and IR lowering a shared checked expression type.
   Keep the public evaluation entry point and expose internal phase boundaries
   for measuring parsing, validation, lowering, and execution separately.
+- Compare structured error kinds and byte spans across engines. Preserve
+  validation before execution and left-to-right arithmetic error order.

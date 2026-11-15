@@ -27,7 +27,7 @@ fn failures_write_only_a_diagnostic() {
         (vec!["1", "%", "2"], "operator must be one of +, -, *, /"),
         (
             vec![],
-            "usage: overcalc <expression> | <left> <operator> <right>",
+            "usage: overcalc <expression> [--engine naive] | <left> <operator> <right>",
         ),
         (vec!["1 / 0"], "division by zero at bytes 2..3"),
     ] {
@@ -54,5 +54,29 @@ fn evaluates_an_expression_with_the_naive_engine() {
         assert_eq!(output.status.code(), Some(0));
         assert_eq!(output.stdout, b"11\n");
         assert!(output.stderr.is_empty());
+    }
+}
+
+#[test]
+fn reports_expression_option_errors() {
+    let usage = "usage: overcalc <expression> [--engine naive] | <left> <operator> <right>";
+    for (args, diagnostic) in [
+        (vec!["1+1", "--engin", "naive"], "unknown option: --engin"),
+        (vec!["1+1", "--engine"], "missing value for --engine"),
+        (
+            vec!["1+1", "--engine", "enterprise"],
+            "available expression engine: naive",
+        ),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_overcalc"))
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            output.stderr,
+            format!("error: {diagnostic}; {usage}\n").as_bytes()
+        );
     }
 }

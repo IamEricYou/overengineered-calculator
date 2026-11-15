@@ -370,4 +370,18 @@ mod tests {
             assert_eq!(error.span, 1..literal.len());
         }
     }
+
+    #[test]
+    fn validates_all_literals_before_evaluating_left_to_right() {
+        let error = evaluate_expression("1/0 + 9223372036854775808").unwrap_err();
+        assert!(matches!(error.kind, ErrorKind::LiteralOutOfRange));
+        assert_eq!(error.span, 6..25);
+
+        let error = evaluate_expression("1/0 + (9223372036854775807 + 1)").unwrap_err();
+        assert!(matches!(
+            error.kind,
+            ErrorKind::Arithmetic(ArithmeticError::DivisionByZero)
+        ));
+        assert_eq!(error.span, 1..2);
+    }
 }

@@ -4,13 +4,23 @@ use calc_core::{evaluate, evaluate_expression, Operator};
 use std::{ffi::OsString, process::ExitCode};
 
 fn calculate(args: &[OsString]) -> Result<i64, String> {
+    const USAGE: &str = "usage: overcalc <expression> [--engine naive] | <left> <operator> <right>";
     let expression = match args {
         [expression] => Some(expression),
+        [_, flag] if flag == "--engine" => {
+            return Err(format!("missing value for --engine; {USAGE}"));
+        }
         [expression, flag, engine] if flag == "--engine" => {
             if engine != "naive" {
-                return Err("available expression engine: naive".into());
+                return Err(format!("available expression engine: naive; {USAGE}"));
             }
             Some(expression)
+        }
+        [_, flag, ..] if flag.as_encoded_bytes().starts_with(b"--") && flag != "--engine" => {
+            return Err(format!(
+                "unknown option: {}; {USAGE}",
+                flag.to_string_lossy()
+            ));
         }
         _ => None,
     };
@@ -21,7 +31,7 @@ fn calculate(args: &[OsString]) -> Result<i64, String> {
         return evaluate_expression(expression).map_err(|error| error.to_string());
     }
     let [left, operator, right] = args else {
-        return Err("usage: overcalc <expression> | <left> <operator> <right>".into());
+        return Err(USAGE.into());
     };
 
     let operator = match operator.to_str() {
