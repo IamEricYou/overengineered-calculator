@@ -1,11 +1,37 @@
 #![forbid(unsafe_code)]
 
-use calc_core::{evaluate, Operator};
+use calc_core::{evaluate, evaluate_expression, Operator};
 use std::{ffi::OsString, process::ExitCode};
 
 fn calculate(args: &[OsString]) -> Result<i64, String> {
+    const USAGE: &str = "usage: overcalc <expression> [--engine naive] | <left> <operator> <right>";
+    let expression = match args {
+        [expression] => Some(expression),
+        [_, flag] if flag == "--engine" => {
+            return Err(format!("missing value for --engine; {USAGE}"));
+        }
+        [expression, flag, engine] if flag == "--engine" => {
+            if engine != "naive" {
+                return Err(format!("available expression engine: naive; {USAGE}"));
+            }
+            Some(expression)
+        }
+        [_, flag, ..] if flag.as_encoded_bytes().starts_with(b"--") && flag != "--engine" => {
+            return Err(format!(
+                "unknown option: {}; {USAGE}",
+                flag.to_string_lossy().escape_default()
+            ));
+        }
+        _ => None,
+    };
+    if let Some(expression) = expression {
+        let expression = expression
+            .to_str()
+            .ok_or("expression must be valid UTF-8")?;
+        return evaluate_expression(expression).map_err(|error| error.to_string());
+    }
     let [left, operator, right] = args else {
-        return Err("usage: overcalc <left> <operator> <right>".into());
+        return Err(USAGE.into());
     };
 
     let operator = match operator.to_str() {
