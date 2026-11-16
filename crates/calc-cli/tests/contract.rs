@@ -27,7 +27,7 @@ fn failures_write_only_a_diagnostic() {
         (vec!["1", "%", "2"], "operator must be one of +, -, *, /"),
         (
             vec![],
-            "usage: overcalc <expression> [--engine naive] | <left> <operator> <right>",
+            "usage: overcalc <expression> [--engine <naive|enterprise>] | <left> <operator> <right>",
         ),
         (vec!["1 / 0"], "division by zero at bytes 2..3"),
     ] {
@@ -42,10 +42,11 @@ fn failures_write_only_a_diagnostic() {
 }
 
 #[test]
-fn evaluates_an_expression_with_the_naive_engine() {
+fn evaluates_an_expression_with_both_engines() {
     for args in [
         vec!["2 + 3 * (4 - 1)"],
         vec!["2 + 3 * (4 - 1)", "--engine", "naive"],
+        vec!["2 + 3 * (4 - 1)", "--engine", "enterprise"],
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_overcalc"))
             .args(args)
@@ -59,7 +60,8 @@ fn evaluates_an_expression_with_the_naive_engine() {
 
 #[test]
 fn reports_expression_option_errors() {
-    let usage = "usage: overcalc <expression> [--engine naive] | <left> <operator> <right>";
+    let usage =
+        "usage: overcalc <expression> [--engine <naive|enterprise>] | <left> <operator> <right>";
     for (args, diagnostic) in [
         (
             vec!["1+1", "--bad\nflag\r\x1b", "naive"],
@@ -68,8 +70,8 @@ fn reports_expression_option_errors() {
         (vec!["1+1", "--engin", "naive"], "unknown option: --engin"),
         (vec!["1+1", "--engine"], "missing value for --engine"),
         (
-            vec!["1+1", "--engine", "enterprise"],
-            "available expression engine: naive",
+            vec!["1+1", "--engine", "unknown"],
+            "available expression engines: naive, enterprise",
         ),
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_overcalc"))

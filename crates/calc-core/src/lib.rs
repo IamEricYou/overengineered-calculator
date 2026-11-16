@@ -2,7 +2,7 @@
 
 mod expression;
 
-pub use expression::{evaluate_expression, ExpressionError};
+pub use expression::{compile_expression, evaluate_expression, ExpressionError, Program};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Operator {
