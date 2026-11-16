@@ -1,21 +1,25 @@
 #![forbid(unsafe_code)]
 
-use calc_core::{evaluate, evaluate_expression, Operator};
+use calc_core::{compile_expression, evaluate, evaluate_expression, Operator};
 use std::{ffi::OsString, process::ExitCode};
 
 fn calculate(args: &[OsString]) -> Result<i64, String> {
-    const USAGE: &str = "usage: overcalc <expression> [--engine naive] | <left> <operator> <right>";
-    let expression = match args {
-        [expression] => Some(expression),
+    const USAGE: &str =
+        "usage: overcalc <expression> [--engine <naive|enterprise>] | <left> <operator> <right>";
+    let expression_and_engine = match args {
+        [expression] => Some((expression, false)),
         [_, flag] if flag == "--engine" => {
             return Err(format!("missing value for --engine; {USAGE}"));
         }
-        [expression, flag, engine] if flag == "--engine" => {
-            if engine != "naive" {
-                return Err(format!("available expression engine: naive; {USAGE}"));
+        [expression, flag, engine] if flag == "--engine" => match engine.to_str() {
+            Some("naive") => Some((expression, true)),
+            Some("enterprise") => Some((expression, false)),
+            _ => {
+                return Err(format!(
+                    "available expression engines: naive, enterprise; {USAGE}"
+                ))
             }
-            Some(expression)
-        }
+        },
         [_, flag, ..] if flag.as_encoded_bytes().starts_with(b"--") && flag != "--engine" => {
             return Err(format!(
                 "unknown option: {}; {USAGE}",
@@ -24,11 +28,16 @@ fn calculate(args: &[OsString]) -> Result<i64, String> {
         }
         _ => None,
     };
-    if let Some(expression) = expression {
+    if let Some((expression, naive)) = expression_and_engine {
         let expression = expression
             .to_str()
             .ok_or("expression must be valid UTF-8")?;
-        return evaluate_expression(expression).map_err(|error| error.to_string());
+        let result = if naive {
+            evaluate_expression(expression)
+        } else {
+            compile_expression(expression).and_then(|program| program.execute())
+        };
+        return result.map_err(|error| error.to_string());
     }
     let [left, operator, right] = args else {
         return Err(USAGE.into());

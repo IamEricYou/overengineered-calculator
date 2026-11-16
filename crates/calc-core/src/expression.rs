@@ -1,18 +1,29 @@
 use crate::{evaluate, ArithmeticError, Operator};
 use std::{fmt, ops::Range};
 
+mod bytecode;
+mod ir;
+
+pub use bytecode::Program;
+
 const MAX_DEPTH: usize = 128;
 
 type Span = Range<usize>;
-type NodeId = usize;
+#[derive(Clone, Copy)]
+struct ParsedNodeId(usize);
 
-#[derive(Debug)]
+#[derive(Clone, Copy)]
+struct CheckedNodeId(usize);
+
+type CheckedExpr = Tree<i64, CheckedNodeId>;
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct ExpressionError {
     kind: ErrorKind,
     span: Span,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum ErrorKind {
     Syntax(&'static str),
     LiteralOutOfRange,
@@ -99,34 +110,34 @@ impl<'input> Lexer<'input> {
     }
 }
 
-enum Operation {
+enum Operation<NodeId> {
     Negate(NodeId),
     Binary(Operator, NodeId, NodeId),
 }
 
-enum NodeKind<Literal> {
+enum NodeKind<Literal, NodeId> {
     Literal(Literal),
-    Operation(Operation),
+    Operation(Operation<NodeId>),
 }
 
-struct Node<Literal> {
-    kind: NodeKind<Literal>,
+struct Node<Literal, NodeId> {
+    kind: NodeKind<Literal, NodeId>,
     span: Span,
 }
 
-struct Tree<Literal> {
-    nodes: Vec<Node<Literal>>,
+struct Tree<Literal, NodeId> {
+    nodes: Vec<Node<Literal, NodeId>>,
     root: NodeId,
 }
 
 struct Parser<'input> {
     lexer: Lexer<'input>,
     lookahead: Token<'input>,
-    nodes: Vec<Node<&'input str>>,
+    nodes: Vec<Node<&'input str, ParsedNodeId>>,
 }
 
 impl<'input> Parser<'input> {
-    fn parse(input: &'input str) -> Result<Tree<&'input str>, ExpressionError> {
+    fn parse(input: &'input str) -> Result<Tree<&'input str, ParsedNodeId>, ExpressionError> {
         let mut lexer = Lexer { input, offset: 0 };
         let lookahead = lexer.next()?;
         let mut parser = Self {
@@ -156,13 +167,13 @@ impl<'input> Parser<'input> {
         }
     }
 
-    fn push(&mut self, kind: NodeKind<&'input str>, span: Span) -> NodeId {
-        let id = self.nodes.len();
+    fn push(&mut self, kind: NodeKind<&'input str, ParsedNodeId>, span: Span) -> ParsedNodeId {
+        let id = ParsedNodeId(self.nodes.len());
         self.nodes.push(Node { kind, span });
         id
     }
 
-    fn expression(&mut self, minimum: u8, depth: usize) -> Result<NodeId, ExpressionError> {
+    fn expression(&mut self, minimum: u8, depth: usize) -> Result<ParsedNodeId, ExpressionError> {
         check_depth(depth, &self.lookahead.span)?;
         let mut left = match self.lookahead.kind {
             TokenKind::Number(value) => {
@@ -222,31 +233,28 @@ fn checked_literal(text: &str, span: &Span) -> Result<i64, ExpressionError> {
     })
 }
 
-impl Tree<&str> {
-    fn validate(&self) -> Result<Tree<i64>, ExpressionError> {
-        let mut validated = Tree {
-            nodes: Vec::with_capacity(self.nodes.len()),
-            root: 0,
-        };
-        validated.root = self.validate_node(self.root, 0, &mut validated.nodes)?;
-        Ok(validated)
+impl Tree<&str, ParsedNodeId> {
+    fn validate(&self) -> Result<CheckedExpr, ExpressionError> {
+        let mut nodes = Vec::with_capacity(self.nodes.len());
+        let root = self.validate_node(self.root, 0, &mut nodes)?;
+        Ok(Tree { nodes, root })
     }
 
     fn validate_node(
         &self,
-        id: NodeId,
+        id: ParsedNodeId,
         depth: usize,
-        nodes: &mut Vec<Node<i64>>,
-    ) -> Result<NodeId, ExpressionError> {
-        let node = &self.nodes[id];
+        nodes: &mut Vec<Node<i64, CheckedNodeId>>,
+    ) -> Result<CheckedNodeId, ExpressionError> {
+        let node = &self.nodes[id.0];
         check_depth(depth, &node.span)?;
         let kind = match node.kind {
             NodeKind::Literal(text) => NodeKind::Literal(checked_literal(text, &node.span)?),
-            NodeKind::Operation(Operation::Negate(child)) => match self.nodes[child].kind {
+            NodeKind::Operation(Operation::Negate(child)) => match self.nodes[child.0].kind {
                 NodeKind::Literal(text)
                     if text.trim_start_matches('0') == "9223372036854775808" =>
                 {
-                    check_depth(depth + 1, &self.nodes[child].span)?;
+                    check_depth(depth + 1, &self.nodes[child.0].span)?;
                     NodeKind::Literal(i64::MIN)
                 }
                 _ => NodeKind::Operation(Operation::Negate(self.validate_node(
@@ -261,7 +269,7 @@ impl Tree<&str> {
                 NodeKind::Operation(Operation::Binary(operator, left, right))
             }
         };
-        let id = nodes.len();
+        let id = CheckedNodeId(nodes.len());
         nodes.push(Node {
             kind,
             span: node.span.clone(),
@@ -270,9 +278,9 @@ impl Tree<&str> {
     }
 }
 
-impl Tree<i64> {
-    fn evaluate_node(&self, id: NodeId) -> Result<i64, ExpressionError> {
-        let node = &self.nodes[id];
+impl CheckedExpr {
+    fn evaluate_node(&self, id: CheckedNodeId) -> Result<i64, ExpressionError> {
+        let node = &self.nodes[id.0];
         let result = match node.kind {
             NodeKind::Literal(value) => Ok(value),
             NodeKind::Operation(Operation::Negate(child)) => self
@@ -292,8 +300,17 @@ impl Tree<i64> {
     }
 }
 
+fn check_expression(input: &str) -> Result<CheckedExpr, ExpressionError> {
+    Parser::parse(input)?.validate()
+}
+
+pub fn compile_expression(input: &str) -> Result<Program, ExpressionError> {
+    let tree = check_expression(input)?;
+    Ok(bytecode::emit(ir::lower(&tree)))
+}
+
 pub fn evaluate_expression(input: &str) -> Result<i64, ExpressionError> {
-    let tree = Parser::parse(input)?.validate()?;
+    let tree = check_expression(input)?;
     tree.evaluate_node(tree.root)
 }
 
@@ -383,5 +400,42 @@ mod tests {
             ErrorKind::Arithmetic(ArithmeticError::DivisionByZero)
         ));
         assert_eq!(error.span, 1..2);
+    }
+
+    #[test]
+    fn compiled_programs_match_direct_results_and_structured_errors() {
+        let chain = format!("-9223372036854775808{}", "+0".repeat(MAX_DEPTH - 1));
+        for input in [
+            "1",
+            "2 + 3 * (4 - 1)",
+            "20 / 5 / 2",
+            "-(9 - 2) / 3",
+            "-9223372036854775808",
+            "--9223372036854775808",
+            "-9223372036854775808 / -1",
+            "9223372036854775807 + 1",
+            "1/0 + 9223372036854775808",
+            "1/0 + (9223372036854775807 + 1)",
+            "(9223372036854775807 + 1) + 1/0",
+            "1 + é",
+            "(1 + 2",
+            &chain,
+        ] {
+            let expected = evaluate_expression(input);
+            assert_eq!(
+                compile_expression(input).and_then(|program| program.execute()),
+                expected,
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn compiled_program_runs_repeatedly_without_the_source() {
+        let input = String::from("2 + 3 * (4 - 1)");
+        let program = compile_expression(&input).unwrap();
+        drop(input);
+        assert_eq!(program.execute(), Ok(11));
+        assert_eq!(program.execute(), Ok(11));
     }
 }
