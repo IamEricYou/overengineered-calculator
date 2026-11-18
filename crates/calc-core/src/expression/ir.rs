@@ -45,3 +45,95 @@ pub(super) fn lower(tree: &CheckedExpr) -> LinearIr {
         result: ValueId(tree.root.0),
     }
 }
+
+impl Value {
+    pub(super) fn for_each_operand(&self, mut visit: impl FnMut(ValueId)) {
+        match *self {
+            Self::Constant(_) => {}
+            Self::Negate(id) => visit(id),
+            Self::Binary(_, left, right) => {
+                visit(left);
+                visit(right);
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum InvalidIr {
+    OperandNotDefined { definition: usize, operand: usize },
+    ResultNotDefined(usize),
+}
+
+/// Only the verifier can construct this wrapper.
+pub(super) struct VerifiedIr(LinearIr);
+
+impl VerifiedIr {
+    pub(super) fn verify(ir: LinearIr) -> Result<Self, InvalidIr> {
+        if ir.result.0 >= ir.definitions.len() {
+            return Err(InvalidIr::ResultNotDefined(ir.result.0));
+        }
+        for (index, definition) in ir.definitions.iter().enumerate() {
+            let mut invalid = None;
+            definition.value.for_each_operand(|id| {
+                if id.0 >= index && invalid.is_none() {
+                    invalid = Some(id.0);
+                }
+            });
+            if let Some(operand) = invalid {
+                return Err(InvalidIr::OperandNotDefined {
+                    definition: index,
+                    operand,
+                });
+            }
+        }
+        Ok(Self(ir))
+    }
+
+    pub(super) fn into_inner(self) -> LinearIr {
+        self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_self_future_and_out_of_bounds_operands() {
+        for operand in [0, 1, 2] {
+            let ir = LinearIr {
+                definitions: vec![
+                    Definition {
+                        value: Value::Negate(ValueId(operand)),
+                        span: 0..1,
+                    },
+                    Definition {
+                        value: Value::Constant(1),
+                        span: 1..2,
+                    },
+                ],
+                result: ValueId(1),
+            };
+            assert_eq!(
+                VerifiedIr::verify(ir).err(),
+                Some(InvalidIr::OperandNotDefined {
+                    definition: 0,
+                    operand
+                }),
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_missing_result() {
+        let ir = LinearIr {
+            definitions: vec![],
+            result: ValueId(0),
+        };
+        assert_eq!(
+            VerifiedIr::verify(ir).err(),
+            Some(InvalidIr::ResultNotDefined(0))
+        );
+    }
+}
