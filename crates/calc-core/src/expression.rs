@@ -3,6 +3,7 @@ use std::{fmt, ops::Range};
 
 mod bytecode;
 mod ir;
+mod optimizer;
 
 pub use bytecode::Program;
 
@@ -306,7 +307,11 @@ fn check_expression(input: &str) -> Result<CheckedExpr, ExpressionError> {
 
 pub fn compile_expression(input: &str) -> Result<Program, ExpressionError> {
     let tree = check_expression(input)?;
-    Ok(bytecode::emit(ir::lower(&tree)))
+    let lowered = ir::VerifiedIr::verify(ir::lower(&tree)).expect("lowering preserves IR ordering");
+    let optimized = optimizer::fold_constants(lowered);
+    let verified =
+        ir::VerifiedIr::verify(optimized).expect("constant folding preserves IR ordering");
+    Ok(bytecode::emit(verified))
 }
 
 pub fn evaluate_expression(input: &str) -> Result<i64, ExpressionError> {
@@ -437,5 +442,46 @@ mod tests {
         drop(input);
         assert_eq!(program.execute(), Ok(11));
         assert_eq!(program.execute(), Ok(11));
+    }
+
+    #[test]
+    fn constant_folding_reduces_instruction_count() {
+        let input = "-(2 + 3 * (4 - 1))";
+        let before = bytecode::emit(
+            ir::VerifiedIr::verify(ir::lower(&check_expression(input).unwrap())).unwrap(),
+        );
+        let after = compile_expression(input).unwrap();
+        assert_eq!(before.instruction_count(), 8);
+        assert_eq!(after.instruction_count(), 1);
+        assert_eq!(after.execute(), Ok(-11));
+    }
+
+    #[test]
+    fn optimization_preserves_the_first_error_and_source_span() {
+        for (input, expected_kind, expected_span) in [
+            (
+                "1/0 + (9223372036854775807 + 1)",
+                ArithmeticError::DivisionByZero,
+                1..2,
+            ),
+            (
+                "(9223372036854775807 + 1) + 1/0",
+                ArithmeticError::Overflow,
+                21..22,
+            ),
+            ("(1 / (2 - 2)) * 0", ArithmeticError::DivisionByZero, 3..4),
+            ("--9223372036854775808", ArithmeticError::Overflow, 0..1),
+        ] {
+            let before = bytecode::emit(
+                ir::VerifiedIr::verify(ir::lower(&check_expression(input).unwrap())).unwrap(),
+            );
+            let after = compile_expression(input).unwrap();
+            let expected = Err(ExpressionError {
+                kind: ErrorKind::Arithmetic(expected_kind),
+                span: expected_span,
+            });
+            assert_eq!(before.execute(), expected, "{input}");
+            assert_eq!(after.execute(), expected, "{input}");
+        }
     }
 }

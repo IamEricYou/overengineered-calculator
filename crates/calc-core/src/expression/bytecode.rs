@@ -1,6 +1,6 @@
 use super::{
     evaluate,
-    ir::{LinearIr, Value},
+    ir::{Value, VerifiedIr},
     ArithmeticError, ErrorKind, ExpressionError, Operator, Span,
 };
 
@@ -25,7 +25,8 @@ pub struct Program {
     result: Register,
 }
 
-pub(super) fn emit(ir: LinearIr) -> Program {
+pub(super) fn emit(ir: VerifiedIr) -> Program {
+    let ir = ir.into_inner();
     let (instructions, spans) = ir
         .definitions
         .into_iter()
@@ -57,6 +58,11 @@ pub(super) fn emit(ir: LinearIr) -> Program {
 }
 
 impl Program {
+    /// Number of instructions emitted for this program.
+    pub fn instruction_count(&self) -> usize {
+        self.instructions.len()
+    }
+
     /// Run the compiled program with a fresh register file.
     pub fn execute(&self) -> Result<i64, ExpressionError> {
         let mut registers = vec![0_i64; self.instructions.len()];

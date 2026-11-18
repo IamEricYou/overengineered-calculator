@@ -47,7 +47,7 @@ Each milestone gets its own pull request.
 - [x] **1. Arithmetic contract and CLI.** Set up the Cargo workspace and CI. Specify integer boundaries, error output, and exit codes so every engine has the same observable behavior.
 - [x] **2. Compiler frontend.** Build a zero-copy lexer, Pratt parser, arena-backed AST, semantic analysis, and a direct evaluator. Borrowed input and byte spans let diagnostics point to the original expression while node IDs expose the arena's storage model.
 - [x] **3. IR, bytecode, and VM.** Lower the AST to linear IR, emit register bytecode, and execute it in the enterprise engine. Separate representations make it possible to measure compilation and repeatedly execute a compiled program.
-- [ ] **4. Optimization passes.** Implement constant folding and compare instruction counts. Failed folds stay at their original execution positions so the first reported arithmetic error survives optimization.
+- [x] **4. Optimization passes.** Implement constant folding and compare instruction counts. Failed folds stay at their original execution positions so the first reported arithmetic error survives optimization.
 - [ ] **5. Memory and allocation tracking.** Reuse preallocated VM registers and count heap allocations. Target zero allocations during repeated execution of an already compiled program with initialized buffers.
 - [ ] **6. Verification.** Add property tests, fuzzing, Miri, and CLI integration tests. Compare both engines and use explicit expected results to check the shared frontend.
 - [ ] **7. Benchmarks and published results.** Add Criterion benchmarks, the benchmark command, and architecture and measurement docs. Measure end-to-end evaluation, compilation, and VM execution with and without optimization. Record the environment and report measured results.
@@ -66,7 +66,8 @@ After implementation, review each PR in a separate verification pass against its
 Both engines share the lexer, Pratt parser, arena AST, and semantic analysis.
 Parsed and checked node IDs have distinct Rust types. The naive engine walks
 the checked tree directly. The enterprise engine lowers that same tree to
-linear IR, emits in-memory register instructions, and executes them in order.
+linear IR, verifies and optimizes it, emits in-memory register instructions, and
+executes them in order.
 Bytecode uses Rust enum instructions with a separate source span table.
 
 Each IR definition produces one virtual value. The emitter assigns it a
@@ -74,3 +75,9 @@ register. The VM currently allocates one register slot per definition for
 each run. A compiled `Program` can execute repeatedly without re-parsing or
 re-emitting bytecode. The compiler preserves left-to-right evaluation order
 and original source locations when converting arithmetic operations.
+
+The constant folding pass replaces successful arithmetic on known constants
+and removes unused constants. It retains potentially failing operations in
+order, with their original source spans. The IR verifier checks operand
+definitions and the result ID before optimization and again before emission.
+For `-(2 + 3 * (4 - 1))`, the instruction count falls from eight to one.
